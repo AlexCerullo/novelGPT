@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Pieces Copilot Python SDK
 
 This repository contains the Pieces Copilot SDK, a convenient wrapper around the Pieces OS Client SDK. It simplifies the process of interacting with your applications by providing a more user-friendly interface to the underlying Pieces OS Client SDK.
@@ -194,3 +195,7 @@ Contributions are welcome! Please read our contributing guidelines before starti
 ## License
 
 This project is licensed under the terms of the MIT license.
+=======
+# masterGPT
+This GPT calls itself recursively to create the best possible result
+>>>>>>> 7cfd969597679175d7da53de2c1ec05e6a7f17cd
