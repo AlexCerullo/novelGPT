@@ -1,49 +1,48 @@
-import pieces_os_client
-from pieces_os_client import (
-    Application,
-    Configuration,
-    ConversationApi,
-    ConversationMessageApi,
-    ConversationMessagesApi,
-    ConversationsApi,
-    QGPTApi,
-    UserApi,
-)
+import openai
+from dotenv import load_dotenv
+import os
+
+#Load env var from api.env
+load_dotenv('api.env')
+api_key = os.getenv('OPENAI_API_KEY')
+
+openai.api_key = api_key
 
 class PiecesClient:
-    def __init__(self, config: dict, tracked_application: Application = None):
-        self.config = Configuration(
-            host=config['baseUrl']
-        )
+    def __init__(self, config: dict):
+        self.api_key = config.get('apiKey', api_key)
+        openai.api_key = self.api_key
 
-        self.api_client = pieces_os_client.ApiClient(self.config)
+    def ask_question(self, question: str) -> str:
+        try:
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "Be extremely sassy!"},
+                    {"role": "user", "content": question},
+                ]
+            )
+            answer_text = response['choices'][0]['message']['content'].strip()
+            return answer_text
+        except Exception as error:
+            print(f'Error asking question: {error}')
+            return 'Error asking question'
 
-        self.conversation_message_api = ConversationMessageApi(self.api_client)
-        self.conversation_messages_api = ConversationMessagesApi(self.api_client)
-        self.conversations_api = ConversationsApi(self.api_client)
-        self.conversation_api = ConversationApi(self.api_client)
-        self.qgpt_api = QGPTApi(self.api_client)
-        self.user_api = UserApi(self.api_client)
+    def create_conversation(self, props: dict = None) -> dict:
+        if props is None:
+            props = {}
 
-        self.tracked_application = tracked_application or Application(
-            id='DEFAULT',
-            name="OPEN_SOURCE",
-            version='0.0.1',
-            platform="MACOS",
-            onboarded=False,
-            privacy="ANONYMOUS",
-        )
+        first_message = props.get('firstMessage', 'Hello!')
+        response = self.ask_question(first_message)
+        return {'conversation_id': 'local-conversation-id', 'answer': response}
 
-    @staticmethod
-    def application_to_dict(application: Application) -> dict:
-        return {
-            'id': application.id,
-            'name': application.name,
-            'version': application.version,
-            'platform': application.platform,
-            'onboarded': application.onboarded,
-            'privacy': application.privacy,
-        }
+    def prompt_conversation(self, message: str, conversation_id: str) -> dict:
+        try:
+            response = self.ask_question(message)
+            return {'text': response}
+        except Exception as error:
+            print(f'Error prompting conversation: {error}')
+            return {'text': 'Error asking question'}
 
     def create_conversation(self, props: dict = None) -> dict:
         if props is None:
@@ -77,48 +76,6 @@ class PiecesClient:
             print(f'Error creating conversation: {error}')
             return None
 
-    def get_conversation(self, conversation_id: str, include_raw_messages: bool = False) -> dict:
-        conversation_messages = []
-
-        try:
-            conversation = self.conversation_api.conversation_get_specific_conversation(
-                conversation=conversation_id,
-            )
-
-            if not include_raw_messages:
-                return conversation.__dict__
-
-            for message_id, index in (conversation.messages.indices or {}).items():
-                message_response = self.conversation_message_api.message_specific_message_snapshot(
-                    message=message_id,
-                )
-
-                if (not message_response.fragment or
-                        not message_response.fragment.string or
-                        not message_response.fragment.string.raw):
-                    continue
-
-                conversation_messages.append({
-                    'message': message_response.fragment.string.raw,
-                    'is_user_message': message_response.role == 'USER',
-                })
-
-            return {
-                **conversation.__dict__,
-                'raw_messages': conversation_messages,
-            }
-        except Exception as error:
-            print(f'Error getting conversation: {error}')
-            return None
-
-    def get_conversations(self) -> list:
-        try:
-            conversations = self.conversations_api.conversations_snapshot()
-            return conversations.iterable or []
-        except Exception as error:
-            print(f'Error fetching conversations: {error}')
-            return []
-
     def ask_question(self, question: str) -> str:
         try:
             answer = self.qgpt_api.question(
@@ -127,6 +84,9 @@ class PiecesClient:
                     'pipeline': {
                         'conversation': {
                             'generalizedCodeDialog': {},
+                            'contextualizedSassyDialog': {
+                                'instruction': 'Be extremely sassy!',
+                            },
                         },
                     },
                     'relevant': {
@@ -134,7 +94,9 @@ class PiecesClient:
                     }
                 }
             )
-            return answer.answers.iterable[0].text
+            # Clean up any unwanted markdown or plaintext tags
+            answer_text = answer.answers.iterable[0].text.strip('```plaintext').strip('```').strip()
+            return answer_text
         except Exception as error:
             print(f'Error asking question: {error}')
             return 'Error asking question'
@@ -220,21 +182,3 @@ class PiecesClient:
         except Exception as error:
             print(f'Error prompting conversation: {error}')
             return {'text': 'Error asking question'}
-
-    def update_conversation_name(self, conversation_id: str) -> str:
-        try:
-            conversation = self.conversation_api.conversation_specific_conversation_rename(
-                conversation=conversation_id,
-            )
-            return conversation.name
-        except Exception as error:
-            print(f'Error updating conversation name: {error}')
-            return 'Error updating conversation name'
-
-    def get_user_profile_picture(self) -> str:
-        try:
-            user_res = self.user_api.user_snapshot()
-            return user_res.user.picture or None
-        except Exception as error:
-            print(f'Error getting user profile picture: {error}')
-            return None

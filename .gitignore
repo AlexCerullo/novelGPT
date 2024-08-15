@@ -1,9 +1,12 @@
-# IDEs
+#IDEs
 .idea
 *.iml
-vscode
+.vscode
 
-# Build files
+#Build files
 dist
 build
 *.egg-info
+
+#Environment vars
+.env
