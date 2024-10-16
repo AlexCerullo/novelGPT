@@ -2,107 +2,150 @@ from dotenv import load_dotenv
 import os
 import openai
 
-#Load env var from api.env
+#Load env variable from api.env
 load_dotenv('api.env')
 api_key = os.getenv('OPENAI_API_KEY')
 
-#OpenAI API key
+#Setting OpenAI API key
 openai.api_key = api_key
 
-# Function to gather and clarify user input
 def get_user_request():
-    while True:
-        user_request = input("Please describe what you want (or type 'quit' to exit): ")
+    user_request = input("Please describe what you want to write about ('quit' to exit): ")
+    if user_request.lower() == 'quit':
+        print("Exiting...")
+        exit()
+    return user_request
+
+def clarify_request(initial_request):
+    clarification_needed = True
+    conversation_history = []
+    
+    while clarification_needed:
+        messages = [
+            {"role": "system", "content": "You are an assistant helping to clarify a request about a novel."},
+            {"role": "user", "content": f"The user wants: {initial_request}. Decide if you need more details, and ask questions if you do."}
+        ]
         
-        if user_request.lower() == 'quit':
-            print("Exiting...")
-            exit()  # This will quit the program
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini-2024-07-18",
+            messages=messages
+        )
+        clarification = response['choices'][0]['message']['content'].strip()
         
-        clarification_needed = True
-        while clarification_needed:
-            response = openai.ChatCompletion.create(
-                model="gpt-4o-mini-2024-07-18",
-                messages=[
-                    {"role": "system", "content": "You are an assistant helping to clarify a request."},
-                    {"role": "user", "content": f"The user wants: {user_request}. Is this request clear enough? If not, ask for clarification."},
-                ]
-            )
-            clarification = response['choices'][0]['message']['content']
+        if "enough info" in clarification.lower():
+            clarification_needed = False
+        else:
+            print(f"Clarification needed: {clarification}")
+            user_input = input("Please clarify further (or type 'proceed' to continue): ")
             
-            if "clear enough" in clarification.lower():
+            if user_input.lower() == 'proceed':
                 clarification_needed = False
             else:
-                user_input = input("I have asked for more clarification, but you can type 'proceed' to continue without further questions, or 'quit' to exit: ")
-                if user_input.lower() == 'proceed':
-                    clarification_needed = False
-                    break  # Exit the clarification loop and proceed
-                elif user_input.lower() == 'quit':
-                    print("Exiting...")
-                    exit()
-                else:
-                    user_request += " " + user_input
-        
-        return user_request
+                conversation_history.append({"question": clarification, "answer": user_input})
+                initial_request += " " + user_input
+    
+    return initial_request, conversation_history
 
+def summarize_request(conversation_history, initial_request2):
+    #Format conversation history as a readable string for AI to read
+    conversation_str = ""
+    for entry in conversation_history:
+        conversation_str += f"Q: {entry['question']}\nA: {entry['answer']}\n"
 
-# Function to generate instructions and outline
-def generate_instructions(user_request):
+    messages = [
+        {"role": "system", "content": "You are summarizing the key information from a conversation about a novel."},
+        {"role": "user", "content": f"Here is the conversation history:\n\n{initial_request2} {conversation_str}\n\nPlease summarize the " +
+         "key details, such as themes, characters, setting, genre, etc. If there is not enough information, use any provided " + 
+         "information and use your creativity to make up the rest."}
+    ]
+    
     response = openai.ChatCompletion.create(
         model="gpt-4o-mini-2024-07-18",
-        messages=[
-            {"role": "system", "content": "You are an expert planner."},
-            {"role": "user", "content": f"Based on the request '{user_request}', create a detailed plan. Include an outline, number of parts needed, and clear instructions for each part."},
-        ]
+        messages=messages
     )
-    instructions = response['choices'][0]['message']['content']
-    return instructions
+    summary = response['choices'][0]['message']['content'].strip()
+    
+    return summary
 
-# Function to execute the tasks recursively
-def execute_recursive_tasks(instructions):
-    parts = instructions.split("Part")
+
+
+
+def plan_task(summary):
+    messages = [
+        {"role": "system", "content": "Your job is to split a novel outline into clear, actionable sub-tasks."},
+        {"role": "user", "content": f"The request: {summary}. \n This request has all the information needed to be completed. " + 
+         "Delegate tasks to as many people as needed. Try to use the minimum needed for the job, depending on length of the novel. Each person should be assigned a chapter, act, etc. " +
+          "An example of a task assigned to a person should be like this: 'Write the 4th chapter of a book about BLANK. The main characters are BLANK and BLANK. So far, BLANK has happened. " +
+          "It has themes of BLANK and BLANK, genre of BLANK. You must write BLANK amount of words.' The most each person can write " +
+          "is 2500 words. Do not assign the task of brainstormer, editor, reviewer, etc. to people - only assign them to write " + 
+          "a specific section of the text. Make sure the word counts of all people combined are equivalent to the total requested wordcount."}
+    ]
+    
+    response = openai.ChatCompletion.create(
+        model="gpt-4o-mini-2024-07-18",
+        messages=messages
+    )
+    
+    task_plan = response['choices'][0]['message']['content'].strip().split("\n")
+    task_plan = [task.strip() for task in task_plan if task.strip()]
+    
+    print("Task:", task_plan)
+    
+    return task_plan
+
+
+def execute_tasks(task_plan):
     results = []
     
-    for i in range(1, len(parts)):
-        part_instruction = f"Part {i}" + parts[i]
-        result = openai.ChatCompletion.create(
+    for i, task in enumerate(task_plan):
+        #Create a clear task for each AI instance
+        messages = [
+            {"role": "system", "content": "You are an AI assigned to write a specific part of a novel. Focus ONLY on the task assigned to you."},
+            {"role": "user", "content": f"Task {i+1}:\n{task}"}
+        ]
+        
+        response = openai.ChatCompletion.create(
             model="gpt-4o-mini-2024-07-18",
-            messages=[
-                {"role": "system", "content": "You are an expert executor."},
-                {"role": "user", "content": part_instruction},
-            ]
+            messages=messages
         )
-        results.append(result['choices'][0]['message']['content'])
+        result = response['choices'][0]['message']['content'].strip()
+        results.append(result)
     
     return results
 
-# Function to save the output to a text file
+
+
 def save_to_text_file(content, filename="output.txt"):
     try:
         print("Attempting to save content to file...")
-        with open(filename, "w") as file:
+        with open(filename, "w", encoding="utf-8") as file:
             file.write(content)
         print("Content saved successfully to", filename)
     except Exception as e:
         print(f"An error occurred while saving the file: {e}")
 
+
 def main():
     try:
-        # Step 1: Get and clarify user request
+        #Get the user request
         user_request = get_user_request()
+
+        #Clarify the user request (if needed)
+        clarified_request, conversation_history = clarify_request(user_request)
         
-        # Step 2: Generate instructions based on the request
-        instructions = generate_instructions(user_request)
-        print("Generated Instructions: ", instructions)  # Debugging line
+        #Summarize the conversation into a clear task
+        summary = summarize_request(conversation_history, user_request)
         
-        # Step 3: Execute the tasks recursively based on the instructions
-        results = execute_recursive_tasks(instructions)
+        #Plan the task into manageable parts
+        task_plan = plan_task(summary)
         
-        # Combine all parts and instructions
-        final_output = instructions + "\n\n" + "\n\n".join(results)
+        #Execute each task and collect results
+        results = execute_tasks(task_plan)
         
-        # Step 4: Save the output to a text file
-        print("Saving the output to a text file...")
-        save_to_text_file(final_output)
+        #Save the final content to a text file
+        full_content = "\n".join(results)
+        save_to_text_file(full_content)
+
     except Exception as e:
         print(f"An error occurred during the process: {e}")
 

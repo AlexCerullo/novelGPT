@@ -1,19 +1,23 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="pieces_copilot_sdk",
-    version="0.6.0",
-    author="Mason Williams",
-    author_email="mason@pieces.app",
-    description="A Pieces OS SDK wrapper that allows anyone to easily create a Pieces Copilot experience with minimal code.",
-    long_description=open('README.md').read(),
-    long_description_content_type='text/markdown',
-    url="https://github.com/mason-at-pieces/pieces-copilot-python-sdk",
+    name="novelGPT",
+    version="1.0.0",
+    author="Alex Cerullo",
+    author_email="cerulloalexandre@gmail.com",
+    description="Novel Writing GPT for Large Projects",
+    long_description=open("README.md").read(),
+    long_description_content_type="text/markdown",
+    url="https://github.com/AlexCerullo",
     packages=find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    python_requires='>=3.7',
+    python_requires=">=3.6",
+    install_requires=[
+        "openai",
+        "python-dotenv",
+    ],
 )
